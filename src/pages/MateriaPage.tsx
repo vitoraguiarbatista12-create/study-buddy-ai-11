@@ -9,7 +9,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Upload, FileText, Brain, Loader2, Trash2
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  ArrowLeft, Upload, FileText, Brain, Loader2, Trash2, ClipboardList
 } from "lucide-react";
 
 interface Documento {
@@ -19,26 +22,38 @@ interface Documento {
   created_at: string;
 }
 
+interface ListaExercicio {
+  id: string;
+  titulo: string;
+  questoes: any[];
+  created_at: string;
+}
+
 const MateriaPage = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [materia, setMateria] = useState<{ id: string; nome: string } | null>(null);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
+  const [listas, setListas] = useState<ListaExercicio[]>([]);
   const [notaDesejada, setNotaDesejada] = useState(7);
   const [uploading, setUploading] = useState(false);
   const [gerando, setGerando] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importando, setImportando] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    const [materiaRes, docsRes] = await Promise.all([
+    const [materiaRes, docsRes, listasRes] = await Promise.all([
       supabase.from("materias").select("*").eq("id", id).single(),
       supabase.from("documentos").select("*").eq("materia_id", id).order("created_at", { ascending: false }),
+      supabase.from("listas_exercicios").select("*").eq("materia_id", id).order("created_at", { ascending: false }),
     ]);
     if (materiaRes.data) setMateria(materiaRes.data);
     if (docsRes.data) setDocumentos(docsRes.data);
+    if (listasRes.data) setListas(listasRes.data as any);
     setLoading(false);
   }, [id]);
 
@@ -47,7 +62,6 @@ const MateriaPage = () => {
   const extractTextFromPDF = async (file: File): Promise<string> => {
     const pdfjsLib = await import("pdfjs-dist");
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
-    
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let text = "";
@@ -123,7 +137,6 @@ const MateriaPage = () => {
 
     setGerando(true);
     try {
-      // Save meta
       await supabase.from("metas_estudo").insert({
         nota_desejada: notaDesejada,
         materia_id: id!,
@@ -150,6 +163,50 @@ const MateriaPage = () => {
       toast.error("Erro ao gerar questões com IA");
     }
     setGerando(false);
+  };
+
+  const handleImportLista = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !id) return;
+    if (file.type !== "application/pdf") {
+      toast.error("Apenas arquivos PDF são aceitos");
+      return;
+    }
+
+    setImportando(true);
+    try {
+      const texto = await extractTextFromPDF(file);
+      if (!texto.trim()) {
+        toast.error("Não foi possível extrair texto do PDF");
+        setImportando(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("extrair-lista", {
+        body: { texto: texto.substring(0, 15000), materiaId: id },
+      });
+
+      if (error) throw error;
+
+      if (data?.listaId) {
+        toast.success(`${data.questoesCount} questões extraídas!`);
+        setImportModalOpen(false);
+        navigate(`/lista/${data.listaId}`);
+      } else {
+        toast.error("Erro ao extrair questões");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao processar lista de exercícios");
+    }
+    setImportando(false);
+    e.target.value = "";
+  };
+
+  const deletarLista = async (listaId: string) => {
+    await supabase.from("listas_exercicios").delete().eq("id", listaId);
+    toast.success("Lista excluída");
+    fetchData();
   };
 
   if (loading) {
@@ -287,6 +344,91 @@ const MateriaPage = () => {
             </Button>
           </CardContent>
         </Card>
+
+        {/* Import Exercise List Button */}
+        <Card className="shadow-card border-border/50 animate-fade-in" style={{ animationDelay: "0.3s" }}>
+          <CardContent className="pt-6">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setImportModalOpen(true)}
+            >
+              <ClipboardList className="w-4 h-4 mr-2" />
+              📄 Importar Lista de Exercícios
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Import Modal */}
+        <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-display">Importar Lista de Exercícios</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <p className="text-sm text-muted-foreground">
+                Envie um PDF com sua lista de exercícios. A IA irá extrair e estruturar as questões automaticamente.
+              </p>
+              <Label
+                htmlFor="lista-upload"
+                className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg p-8 cursor-pointer hover:border-primary/50 transition-colors"
+              >
+                {importando ? (
+                  <>
+                    <Loader2 className="w-8 h-8 text-primary animate-spin mb-2" />
+                    <span className="text-sm text-muted-foreground">Lendo sua lista de exercícios...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-8 h-8 text-muted-foreground mb-2" />
+                    <span className="text-sm text-muted-foreground">Clique para enviar um PDF</span>
+                  </>
+                )}
+              </Label>
+              <Input
+                id="lista-upload"
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={handleImportLista}
+                disabled={importando}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Minhas Listas */}
+        {listas.length > 0 && (
+          <Card className="shadow-card border-border/50 animate-fade-in" style={{ animationDelay: "0.4s" }}>
+            <CardHeader>
+              <CardTitle className="font-display flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-primary" />
+                Minhas Listas ({listas.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {listas.map((lista) => (
+                <div key={lista.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                  <div
+                    className="flex items-center gap-2 min-w-0 cursor-pointer hover:text-primary transition-colors flex-1"
+                    onClick={() => navigate(`/lista/${lista.id}`)}
+                  >
+                    <ClipboardList className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div className="min-w-0">
+                      <span className="text-sm font-medium truncate block">{lista.titulo}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {lista.questoes.length} questões · {new Date(lista.created_at).toLocaleDateString("pt-BR")}
+                      </span>
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => deletarLista(lista.id)}>
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </main>
     </div>
   );
