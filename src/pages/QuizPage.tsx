@@ -104,6 +104,14 @@ const QuizPage = () => {
 
     const nota = questoes.length > 0 ? (acertos / questoes.length) * 10 : 0;
 
+    // Save user responses per question
+    for (const q of questoes) {
+      await supabase
+        .from("questoes")
+        .update({ resposta_usuario: allRespostas[q.id] || null })
+        .eq("id", q.id);
+    }
+
     // Send data to edge function which handles both the update and AI feedback
     try {
       await supabase.functions.invoke("feedback-quiz", {

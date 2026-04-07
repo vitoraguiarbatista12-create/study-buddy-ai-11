@@ -134,6 +134,7 @@ export type Database = {
           materia_id: string
           pergunta: string
           resposta_correta: string
+          resposta_usuario: string | null
           resultado_id: string | null
         }
         Insert: {
@@ -143,6 +144,7 @@ export type Database = {
           materia_id: string
           pergunta: string
           resposta_correta: string
+          resposta_usuario?: string | null
           resultado_id?: string | null
         }
         Update: {
@@ -152,6 +154,7 @@ export type Database = {
           materia_id?: string
           pergunta?: string
           resposta_correta?: string
+          resposta_usuario?: string | null
           resultado_id?: string | null
         }
         Relationships: [

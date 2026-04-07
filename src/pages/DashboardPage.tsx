@@ -9,11 +9,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   BookOpen, Plus, LogOut, FileText, Target, Brain, TrendingUp,
-  Trash2
+  Trash2, MoreVertical, Eye
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Materia {
   id: string;
@@ -39,6 +46,7 @@ const DashboardPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<{ nome: string } | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -79,6 +87,18 @@ const DashboardPage = () => {
     const { error } = await supabase.from("materias").delete().eq("id", id);
     if (error) toast.error("Erro ao excluir");
     else fetchData();
+  };
+
+  const deletarResultado = async () => {
+    if (!deleteId) return;
+    const { error } = await supabase.from("resultados").delete().eq("id", deleteId);
+    if (error) {
+      toast.error("Erro ao apagar resultado");
+    } else {
+      setResultados((prev) => prev.filter((r) => r.id !== deleteId));
+      toast.success("Resultado apagado");
+    }
+    setDeleteId(null);
   };
 
   const mediaGeral = resultados.length > 0
@@ -271,11 +291,31 @@ const DashboardPage = () => {
                           {r.acertos} acertos, {r.erros} erros
                         </p>
                       </div>
-                      <div className="text-right">
-                        <p className={`text-xl font-bold font-display ${cls.color}`}>
-                          {Number(r.nota_estimada).toFixed(1)}
-                        </p>
-                        <p className={`text-xs font-medium ${cls.color}`}>{cls.label}</p>
+                      <div className="flex items-center gap-3">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => navigate(`/revisao/${r.id}`)}>
+                              <Eye className="w-4 h-4 mr-2" /> Ver respostas
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeleteId(r.id)}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" /> Apagar resultado
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <div className="text-right">
+                          <p className={`text-xl font-bold font-display ${cls.color}`}>
+                            {Number(r.nota_estimada).toFixed(1)}
+                          </p>
+                          <p className={`text-xs font-medium ${cls.color}`}>{cls.label}</p>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -284,6 +324,27 @@ const DashboardPage = () => {
             </div>
           </>
         )}
+
+        {/* Delete confirmation dialog */}
+        <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="font-display">Apagar resultado</AlertDialogTitle>
+              <AlertDialogDescription>
+                Deseja apagar este resultado? Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={deletarResultado}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Apagar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </div>
   );
