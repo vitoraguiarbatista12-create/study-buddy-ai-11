@@ -292,11 +292,31 @@ const DashboardPage = () => {
                           {r.acertos} acertos, {r.erros} erros
                         </p>
                       </div>
-                      <div className="text-right">
-                        <p className={`text-xl font-bold font-display ${cls.color}`}>
-                          {Number(r.nota_estimada).toFixed(1)}
-                        </p>
-                        <p className={`text-xs font-medium ${cls.color}`}>{cls.label}</p>
+                      <div className="flex items-center gap-3">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => navigate(`/revisao/${r.id}`)}>
+                              <Eye className="w-4 h-4 mr-2" /> Ver respostas
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeleteId(r.id)}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" /> Apagar resultado
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <div className="text-right">
+                          <p className={`text-xl font-bold font-display ${cls.color}`}>
+                            {Number(r.nota_estimada).toFixed(1)}
+                          </p>
+                          <p className={`text-xs font-medium ${cls.color}`}>{cls.label}</p>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -305,6 +325,27 @@ const DashboardPage = () => {
             </div>
           </>
         )}
+
+        {/* Delete confirmation dialog */}
+        <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="font-display">Apagar resultado</AlertDialogTitle>
+              <AlertDialogDescription>
+                Deseja apagar este resultado? Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={deletarResultado}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Apagar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </div>
   );
