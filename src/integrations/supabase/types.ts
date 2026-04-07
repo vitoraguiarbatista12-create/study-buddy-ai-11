@@ -14,7 +14,204 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      documentos: {
+        Row: {
+          created_at: string
+          id: string
+          materia_id: string
+          nome_arquivo: string
+          storage_path: string | null
+          texto_extraido: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          materia_id: string
+          nome_arquivo: string
+          storage_path?: string | null
+          texto_extraido?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          materia_id?: string
+          nome_arquivo?: string
+          storage_path?: string | null
+          texto_extraido?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documentos_materia_id_fkey"
+            columns: ["materia_id"]
+            isOneToOne: false
+            referencedRelation: "materias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      materias: {
+        Row: {
+          created_at: string
+          id: string
+          nome: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nome: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nome?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      metas_estudo: {
+        Row: {
+          created_at: string
+          id: string
+          materia_id: string
+          nota_desejada: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          materia_id: string
+          nota_desejada: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          materia_id?: string
+          nota_desejada?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metas_estudo_materia_id_fkey"
+            columns: ["materia_id"]
+            isOneToOne: false
+            referencedRelation: "materias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          nome: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nome?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nome?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      questoes: {
+        Row: {
+          alternativas: Json
+          created_at: string
+          id: string
+          materia_id: string
+          pergunta: string
+          resposta_correta: string
+          resultado_id: string | null
+        }
+        Insert: {
+          alternativas?: Json
+          created_at?: string
+          id?: string
+          materia_id: string
+          pergunta: string
+          resposta_correta: string
+          resultado_id?: string | null
+        }
+        Update: {
+          alternativas?: Json
+          created_at?: string
+          id?: string
+          materia_id?: string
+          pergunta?: string
+          resposta_correta?: string
+          resultado_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "questoes_materia_id_fkey"
+            columns: ["materia_id"]
+            isOneToOne: false
+            referencedRelation: "materias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "questoes_resultado_id_fkey"
+            columns: ["resultado_id"]
+            isOneToOne: false
+            referencedRelation: "resultados"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resultados: {
+        Row: {
+          acertos: number
+          created_at: string
+          erros: number
+          feedback: string | null
+          id: string
+          materia_id: string
+          nota_estimada: number
+          user_id: string
+        }
+        Insert: {
+          acertos?: number
+          created_at?: string
+          erros?: number
+          feedback?: string | null
+          id?: string
+          materia_id: string
+          nota_estimada?: number
+          user_id: string
+        }
+        Update: {
+          acertos?: number
+          created_at?: string
+          erros?: number
+          feedback?: string | null
+          id?: string
+          materia_id?: string
+          nota_estimada?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resultados_materia_id_fkey"
+            columns: ["materia_id"]
+            isOneToOne: false
+            referencedRelation: "materias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
