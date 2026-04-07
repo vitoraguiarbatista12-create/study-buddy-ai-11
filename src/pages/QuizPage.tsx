@@ -104,14 +104,9 @@ const QuizPage = () => {
 
     const nota = questoes.length > 0 ? (acertos / questoes.length) * 10 : 0;
 
-    await supabase
-      .from("resultados")
-      .update({ acertos, erros, nota_estimada: nota })
-      .eq("id", resultadoId!);
-
-    // Get AI feedback
+    // Send data to edge function which handles both the update and AI feedback
     try {
-      const { data } = await supabase.functions.invoke("feedback-quiz", {
+      await supabase.functions.invoke("feedback-quiz", {
         body: {
           resultadoId,
           acertos,
@@ -124,12 +119,6 @@ const QuizPage = () => {
           })),
         },
       });
-      if (data?.feedback) {
-        await supabase
-          .from("resultados")
-          .update({ feedback: data.feedback })
-          .eq("id", resultadoId!);
-      }
     } catch (err) {
       console.error("Feedback error:", err);
     }

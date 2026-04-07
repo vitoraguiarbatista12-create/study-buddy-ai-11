@@ -1,0 +1,1 @@
+CREATE POLICY "Users can update own resultados" ON public.resultados FOR UPDATE TO public USING (auth.uid() = user_id);
