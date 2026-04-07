@@ -46,6 +46,7 @@ const DashboardPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<{ nome: string } | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -86,6 +87,19 @@ const DashboardPage = () => {
     const { error } = await supabase.from("materias").delete().eq("id", id);
     if (error) toast.error("Erro ao excluir");
     else fetchData();
+  };
+
+  const deletarResultado = async () => {
+    if (!deleteId) return;
+    const { error } = await supabase.from("resultados").delete().eq("id", deleteId);
+    if (error) {
+      toast.error("Erro ao apagar resultado");
+    } else {
+      setResultados((prev) => prev.filter((r) => r.id !== deleteId));
+      toast.success("Resultado apagado");
+    }
+    setDeleteId(null);
+  };
   };
 
   const mediaGeral = resultados.length > 0
