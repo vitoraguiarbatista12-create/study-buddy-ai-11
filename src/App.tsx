@@ -11,6 +11,7 @@ import DashboardPage from "./pages/DashboardPage";
 import MateriaPage from "./pages/MateriaPage";
 import QuizPage from "./pages/QuizPage";
 import ResultadoPage from "./pages/ResultadoPage";
+import RevisaoPage from "./pages/RevisaoPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,10 @@ const App = () => (
             <Route
               path="/resultado/:resultadoId"
               element={<ProtectedRoute><ResultadoPage /></ProtectedRoute>}
+            />
+            <Route
+              path="/revisao/:resultadoId"
+              element={<ProtectedRoute><RevisaoPage /></ProtectedRoute>}
             />
             <Route path="*" element={<NotFound />} />
           </Routes>
