@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
@@ -127,11 +128,7 @@ const ResultadoPage = () => {
           <CardContent>
             {resultado.feedback ? (
               <div className="prose prose-sm max-w-none text-foreground">
-                {resultado.feedback.split("\n").map((line: string, i: number) => (
-                  <p key={i} className={line.trim() === "" ? "mb-2" : "mb-1"}>
-                    {line}
-                  </p>
-                ))}
+                <ReactMarkdown>{resultado.feedback}</ReactMarkdown>
               </div>
             ) : (
               <div className="flex items-center gap-2 text-muted-foreground">
