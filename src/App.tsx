@@ -48,6 +48,10 @@ const App = () => (
               path="/revisao/:resultadoId"
               element={<ProtectedRoute><RevisaoPage /></ProtectedRoute>}
             />
+            <Route
+              path="/lista/:listaId"
+              element={<ProtectedRoute><ListaExerciciosPage /></ProtectedRoute>}
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
