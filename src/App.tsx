@@ -12,6 +12,7 @@ import MateriaPage from "./pages/MateriaPage";
 import QuizPage from "./pages/QuizPage";
 import ResultadoPage from "./pages/ResultadoPage";
 import RevisaoPage from "./pages/RevisaoPage";
+import ListaExerciciosPage from "./pages/ListaExerciciosPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
