@@ -49,6 +49,38 @@ export type Database = {
           },
         ]
       }
+      listas_exercicios: {
+        Row: {
+          created_at: string
+          id: string
+          materia_id: string
+          questoes: Json
+          titulo: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          materia_id: string
+          questoes?: Json
+          titulo?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          materia_id?: string
+          questoes?: Json
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listas_exercicios_materia_id_fkey"
+            columns: ["materia_id"]
+            isOneToOne: false
+            referencedRelation: "materias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       materias: {
         Row: {
           created_at: string
