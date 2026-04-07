@@ -100,7 +100,6 @@ const DashboardPage = () => {
     }
     setDeleteId(null);
   };
-  };
 
   const mediaGeral = resultados.length > 0
     ? (resultados.reduce((s, r) => s + Number(r.nota_estimada), 0) / resultados.length).toFixed(1)
