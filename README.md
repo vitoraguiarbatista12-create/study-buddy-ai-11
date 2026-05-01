@@ -1,3 +1,1 @@
-# Welcome to your Lovable project
-
-TODO: Document your project here
+As chaves novas do env estão comigo (Marcos), caso queira para rodar mandar mensagem para mim

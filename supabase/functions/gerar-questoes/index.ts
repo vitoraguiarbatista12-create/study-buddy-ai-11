@@ -19,14 +19,11 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // Get user from auth header
     const authHeader = req.headers.get("Authorization");
     let userId: string | null = null;
     if (authHeader) {
@@ -57,7 +54,7 @@ REGRAS:
 - Para dificuldade "médio": questões que exigem compreensão e relação entre conceitos
 - Para dificuldade "difícil": questões de análise, aplicação e pensamento crítico
 
-Responda APENAS com um array JSON válido no formato:
+Responda APENAS com um array JSON válido, sem texto antes ou depois, sem blocos de markdown:
 [
   {
     "pergunta": "texto da pergunta",
@@ -66,109 +63,56 @@ Responda APENAS com um array JSON válido no formato:
   }
 ]`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Groq usa a mesma interface da OpenAI
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Gere questões baseadas neste texto:\n\n${texto.substring(0, 12000)}` },
         ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "gerar_questoes",
-              description: "Gera uma lista de 10 questões de múltipla escolha",
-              parameters: {
-                type: "object",
-                properties: {
-                  questoes: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        pergunta: { type: "string" },
-                        alternativas: { type: "array", items: { type: "string" } },
-                        resposta: { type: "string" }
-                      },
-                      required: ["pergunta", "alternativas", "resposta"],
-                      additionalProperties: false
-                    }
-                  }
-                },
-                required: ["questoes"],
-                additionalProperties: false
-              }
-            }
-          }
-        ],
-        tool_choice: { type: "function", function: { name: "gerar_questoes" } },
+        temperature: 0.7,
+        max_tokens: 4096,
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("AI error:", response.status, errText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Credits exhausted. Please add funds." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error("AI gateway error");
+      console.error("Groq error:", response.status, errText);
+      throw new Error(`Groq error: ${response.status}`);
     }
 
     const aiData = await response.json();
+    const content = aiData.choices?.[0]?.message?.content || "";
+
+    const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     let questoes: any[] = [];
-
-    // Extract from tool call
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (toolCall?.function?.arguments) {
-      const parsed = JSON.parse(toolCall.function.arguments);
-      questoes = parsed.questoes || [];
-    }
-
-    if (questoes.length === 0) {
-      // Fallback: try to parse content directly
-      const content = aiData.choices?.[0]?.message?.content || "";
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        questoes = JSON.parse(jsonMatch[0]);
-      }
+    const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      questoes = JSON.parse(jsonMatch[0]);
     }
 
     if (questoes.length === 0) {
       return new Response(JSON.stringify({ error: "Failed to generate questions" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Create resultado first
     const { data: resultadoData, error: resultadoError } = await supabase
       .from("resultados")
-      .insert({
-        acertos: 0,
-        erros: 0,
-        nota_estimada: 0,
-        user_id: userId,
-        materia_id: materiaId,
-      })
+      .insert({ acertos: 0, erros: 0, nota_estimada: 0, user_id: userId, materia_id: materiaId })
       .select("id")
       .single();
 
     if (resultadoError) throw resultadoError;
     const resultadoId = resultadoData.id;
 
-    // Insert questoes
     const questoesInsert = questoes.slice(0, 10).map((q: any) => ({
       pergunta: q.pergunta,
       alternativas: q.alternativas,

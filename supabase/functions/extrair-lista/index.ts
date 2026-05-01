@@ -11,119 +11,100 @@ serve(async (req) => {
 
   try {
     const { texto, materiaId } = await req.json();
+
     if (!texto || !materiaId) {
       return new Response(JSON.stringify({ error: "Missing texto or materiaId" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     const { data: { user } } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (!user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const systemPrompt = `Você é um assistente que extrai questões de listas de exercícios a partir de texto de PDFs acadêmicos.
+Analise o texto e identifique cada questão individualmente.
+
+Responda APENAS com um JSON válido, sem texto antes ou depois, sem blocos de markdown:
+{
+  "titulo": "Título ou nome da lista identificado no texto",
+  "questoes": [
+    {
+      "numero": 1,
+      "enunciado": "texto completo da questão",
+      "alternativas": ["A) ...", "B) ...", "C) ...", "D) ..."],
+      "tipo": "multipla_escolha"
+    },
+    {
+      "numero": 2,
+      "enunciado": "texto completo da questão dissertativa",
+      "alternativas": [],
+      "tipo": "dissertativa"
+    }
+  ]
+}
+
+Ignore imagens, gráficos ou referências visuais que não podem ser interpretadas como texto.`;
+
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "llama-3.3-70b-versatile",
         messages: [
-          {
-            role: "system",
-            content: `Você é um assistente que extrai questões de listas de exercícios a partir de texto de PDFs acadêmicos.
-Analise o texto e identifique cada questão individualmente. Para cada questão, extraia:
-- O número da questão
-- O enunciado completo
-- As alternativas (se for múltipla escolha)
-- O tipo: "multipla_escolha" ou "dissertativa"
-
-Ignore imagens, gráficos ou referências visuais que não podem ser interpretadas como texto.`
-          },
-          {
-            role: "user",
-            content: `Extraia as questões desta lista de exercícios:\n\n${texto.substring(0, 15000)}`
-          }
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Extraia as questões desta lista de exercícios:\n\n${texto.substring(0, 15000)}` },
         ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "extrair_questoes",
-            description: "Extrai questões estruturadas de uma lista de exercícios",
-            parameters: {
-              type: "object",
-              properties: {
-                titulo: { type: "string", description: "Título ou nome da lista identificado no texto" },
-                questoes: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      numero: { type: "number" },
-                      enunciado: { type: "string" },
-                      alternativas: { type: "array", items: { type: "string" } },
-                      tipo: { type: "string", enum: ["multipla_escolha", "dissertativa"] }
-                    },
-                    required: ["numero", "enunciado", "tipo"],
-                    additionalProperties: false
-                  }
-                }
-              },
-              required: ["titulo", "questoes"],
-              additionalProperties: false
-            }
-          }
-        }],
-        tool_choice: { type: "function", function: { name: "extrair_questoes" } },
+        temperature: 0.2,
+        max_tokens: 4096,
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("AI error:", response.status, errText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Credits exhausted. Please add funds." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error("AI gateway error");
+      console.error("Groq error:", response.status, errText);
+      throw new Error(`Groq error: ${response.status}`);
     }
 
     const aiData = await response.json();
-    let resultado = { titulo: "Lista de Exercícios", questoes: [] as any[] };
+    const content = aiData.candidates?.[0]?.content?.parts?.[0]?.text
+      || aiData.choices?.[0]?.message?.content
+      || "";
 
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (toolCall?.function?.arguments) {
-      resultado = JSON.parse(toolCall.function.arguments);
+    const cleaned = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    let resultado = { titulo: "Lista de Exercícios", questoes: [] as any[] };
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      resultado = JSON.parse(jsonMatch[0]);
     }
 
     if (!resultado.questoes || resultado.questoes.length === 0) {
       return new Response(JSON.stringify({ error: "Não foi possível extrair questões do PDF" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Save to database
     const { data: listaData, error: insertError } = await supabase
       .from("listas_exercicios")
       .insert({
@@ -142,7 +123,8 @@ Ignore imagens, gráficos ou referências visuais que não podem ser interpretad
   } catch (e) {
     console.error("extrair-lista error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
