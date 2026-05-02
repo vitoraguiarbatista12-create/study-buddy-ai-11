@@ -42,17 +42,34 @@ serve(async (req) => {
     const nota = notaDesejada || 7;
     const dificuldade = nota >= 8 ? "difícil" : nota >= 5 ? "médio" : "fácil";
 
-    const systemPrompt = `Você é um professor especialista que gera questões de prova. Gere exatamente 10 questões de múltipla escolha baseadas no texto fornecido.
+    const systemPrompt = `Você é um professor especialista que gera questões de prova sobre o CONTEÚDO da disciplina.
 
 Nível de dificuldade: ${dificuldade} (nota desejada: ${nota}/10)
 
-REGRAS:
+REGRAS OBRIGATÓRIAS:
+- Gere exatamente 10 questões de múltipla escolha
 - Cada questão deve ter exatamente 4 alternativas
 - Apenas uma alternativa deve ser correta
-- As questões devem cobrir diferentes partes do conteúdo
-- Para dificuldade "fácil": questões diretas e conceituais
-- Para dificuldade "médio": questões que exigem compreensão e relação entre conceitos
-- Para dificuldade "difícil": questões de análise, aplicação e pensamento crítico
+- As questões devem testar o CONHECIMENTO DO CONTEÚDO — conceitos, teorias, processos, fórmulas, definições, aplicações práticas
+
+PROIBIDO — NUNCA pergunte sobre:
+- Carga horária, duração ou estrutura do curso
+- Objetivos gerais ou específicos do curso/disciplina
+- Critérios de avaliação, notas ou formas de avaliação
+- Nome da instituição, professor ou autores do material
+- Ementa, bibliografia ou referências bibliográficas
+- Qualquer informação administrativa ou burocrática do documento
+
+FOQUE EM:
+- Conceitos, definições e terminologias do assunto
+- Processos, etapas ou mecanismos descritos no conteúdo
+- Relações de causa e efeito dentro do tema
+- Aplicações práticas e exemplos do conteúdo
+- Comparações entre tecnologias, métodos ou abordagens apresentadas
+
+Para dificuldade "fácil": questões diretas sobre definições e conceitos básicos
+Para dificuldade "médio": questões que exigem compreensão e relação entre conceitos
+Para dificuldade "difícil": questões de análise, aplicação e pensamento crítico
 
 Responda APENAS com um array JSON válido, sem texto antes ou depois, sem blocos de markdown:
 [
@@ -105,10 +122,10 @@ Responda APENAS com um array JSON válido, sem texto antes ou depois, sem blocos
     }
 
     const { data: resultadoData, error: resultadoError } = await supabase
-      .from("resultados")
-      .insert({ acertos: 0, erros: 0, nota_estimada: 0, user_id: userId, materia_id: materiaId })
-      .select("id")
-      .single();
+        .from("resultados")
+        .insert({ acertos: 0, erros: 0, nota_estimada: 0, user_id: userId, materia_id: materiaId })
+        .select("id")
+        .single();
 
     if (resultadoError) throw resultadoError;
     const resultadoId = resultadoData.id;

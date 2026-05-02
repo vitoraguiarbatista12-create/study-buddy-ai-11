@@ -12,8 +12,12 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  ArrowLeft, Upload, FileText, Brain, Loader2, Trash2, ClipboardList
+  ArrowLeft, Upload, FileText, Brain, Loader2, Trash2, ClipboardList,
+  TrendingUp, Target, CheckCircle, BarChart2
 } from "lucide-react";
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
+} from "recharts";
 
 interface Documento {
   id: string;
@@ -29,6 +33,14 @@ interface ListaExercicio {
   created_at: string;
 }
 
+interface Resultado {
+  id: string;
+  nota_estimada: number;
+  acertos: number;
+  erros: number;
+  created_at: string;
+}
+
 const MateriaPage = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -36,6 +48,7 @@ const MateriaPage = () => {
   const [materia, setMateria] = useState<{ id: string; nome: string } | null>(null);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [listas, setListas] = useState<ListaExercicio[]>([]);
+  const [resultados, setResultados] = useState<Resultado[]>([]);
   const [notaDesejada, setNotaDesejada] = useState(7);
   const [uploading, setUploading] = useState(false);
   const [gerando, setGerando] = useState(false);
@@ -46,14 +59,16 @@ const MateriaPage = () => {
   const fetchData = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    const [materiaRes, docsRes, listasRes] = await Promise.all([
+    const [materiaRes, docsRes, listasRes, resultadosRes] = await Promise.all([
       supabase.from("materias").select("*").eq("id", id).single(),
       supabase.from("documentos").select("*").eq("materia_id", id).order("created_at", { ascending: false }),
       supabase.from("listas_exercicios").select("*").eq("materia_id", id).order("created_at", { ascending: false }),
+      supabase.from("resultados").select("*").eq("materia_id", id).order("created_at", { ascending: true }),
     ]);
     if (materiaRes.data) setMateria(materiaRes.data);
     if (docsRes.data) setDocumentos(docsRes.data);
     if (listasRes.data) setListas(listasRes.data as any);
+    if (resultadosRes.data) setResultados(resultadosRes.data);
     setLoading(false);
   }, [id]);
 
@@ -76,39 +91,25 @@ const MateriaPage = () => {
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user || !id) return;
-    if (file.type !== "application/pdf") {
-      toast.error("Apenas arquivos PDF são aceitos");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("Arquivo muito grande (máx 10MB)");
-      return;
-    }
+    if (file.type !== "application/pdf") { toast.error("Apenas arquivos PDF são aceitos"); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("Arquivo muito grande (máx 10MB)"); return; }
 
     setUploading(true);
     try {
       const texto = await extractTextFromPDF(file);
-      if (!texto.trim()) {
-        toast.error("Não foi possível extrair texto do PDF");
-        setUploading(false);
-        return;
-      }
-
+      if (!texto.trim()) { toast.error("Não foi possível extrair texto do PDF"); setUploading(false); return; }
       const storagePath = `${user.id}/${id}/${Date.now()}_${file.name}`;
       await supabase.storage.from("pdfs").upload(storagePath, file);
-
       await supabase.from("documentos").insert({
         nome_arquivo: file.name,
         texto_extraido: texto.substring(0, 50000),
         materia_id: id,
         storage_path: storagePath,
       });
-
       toast.success("PDF enviado e texto extraído!");
       fetchData();
     } catch (err) {
-      console.error(err);
-      toast.error("Erro ao processar PDF");
+      console.error(err); toast.error("Erro ao processar PDF");
     }
     setUploading(false);
     e.target.value = "";
@@ -120,47 +121,23 @@ const MateriaPage = () => {
   };
 
   const gerarQuiz = async () => {
-    if (documentos.length === 0) {
-      toast.error("Envie ao menos um PDF primeiro");
-      return;
-    }
-
-    const textoCompleto = documentos
-      .map((d) => d.texto_extraido)
-      .filter(Boolean)
-      .join("\n\n");
-
-    if (!textoCompleto.trim()) {
-      toast.error("Nenhum texto extraído dos PDFs");
-      return;
-    }
+    if (documentos.length === 0) { toast.error("Envie ao menos um PDF primeiro"); return; }
+    const textoCompleto = documentos.map(d => d.texto_extraido).filter(Boolean).join("\n\n");
+    if (!textoCompleto.trim()) { toast.error("Nenhum texto extraído dos PDFs"); return; }
 
     setGerando(true);
     try {
-      await supabase.from("metas_estudo").insert({
-        nota_desejada: notaDesejada,
-        materia_id: id!,
-      });
-
+      await supabase.from("metas_estudo").insert({ nota_desejada: notaDesejada, materia_id: id! });
       const { data, error } = await supabase.functions.invoke("gerar-questoes", {
-        body: {
-          texto: textoCompleto.substring(0, 15000),
-          notaDesejada,
-          materiaId: id,
-        },
+        body: { texto: textoCompleto.substring(0, 15000), notaDesejada, materiaId: id },
       });
-
       if (error) throw error;
-
       if (data?.resultadoId) {
         toast.success("Quiz gerado! Vamos começar!");
         navigate(`/quiz/${data.resultadoId}`);
-      } else {
-        toast.error("Erro ao gerar quiz");
-      }
+      } else toast.error("Erro ao gerar quiz");
     } catch (err) {
-      console.error(err);
-      toast.error("Erro ao gerar questões com IA");
+      console.error(err); toast.error("Erro ao gerar questões com IA");
     }
     setGerando(false);
   };
@@ -168,36 +145,23 @@ const MateriaPage = () => {
   const handleImportLista = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user || !id) return;
-    if (file.type !== "application/pdf") {
-      toast.error("Apenas arquivos PDF são aceitos");
-      return;
-    }
+    if (file.type !== "application/pdf") { toast.error("Apenas arquivos PDF são aceitos"); return; }
 
     setImportando(true);
     try {
       const texto = await extractTextFromPDF(file);
-      if (!texto.trim()) {
-        toast.error("Não foi possível extrair texto do PDF");
-        setImportando(false);
-        return;
-      }
-
+      if (!texto.trim()) { toast.error("Não foi possível extrair texto do PDF"); setImportando(false); return; }
       const { data, error } = await supabase.functions.invoke("extrair-lista", {
         body: { texto: texto.substring(0, 15000), materiaId: id },
       });
-
       if (error) throw error;
-
       if (data?.listaId) {
         toast.success(`${data.questoesCount} questões extraídas!`);
         setImportModalOpen(false);
         navigate(`/lista/${data.listaId}`);
-      } else {
-        toast.error("Erro ao extrair questões");
-      }
+      } else toast.error("Erro ao extrair questões");
     } catch (err) {
-      console.error(err);
-      toast.error("Erro ao processar lista de exercícios");
+      console.error(err); toast.error("Erro ao processar lista de exercícios");
     }
     setImportando(false);
     e.target.value = "";
@@ -209,23 +173,32 @@ const MateriaPage = () => {
     fetchData();
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+    </div>
+  );
 
-  if (!materia) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <p className="text-muted-foreground">Matéria não encontrada</p>
-      </div>
-    );
-  }
+  if (!materia) return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <p className="text-muted-foreground">Matéria não encontrada</p>
+    </div>
+  );
 
   const dificuldadeLabel = notaDesejada >= 8 ? "Difícil" : notaDesejada >= 5 ? "Médio" : "Fácil";
+  const mediaNotas = resultados.length > 0
+    ? (resultados.reduce((s, r) => s + Number(r.nota_estimada), 0) / resultados.length).toFixed(1) : null;
+  const melhorNota = resultados.length > 0
+    ? Math.max(...resultados.map(r => Number(r.nota_estimada))).toFixed(1) : null;
+  const totalAcertos = resultados.reduce((s, r) => s + r.acertos, 0);
+  const totalQuestoes = resultados.reduce((s, r) => s + r.acertos + r.erros, 0);
+  const taxaAcerto = totalQuestoes > 0 ? ((totalAcertos / totalQuestoes) * 100).toFixed(0) : null;
+
+  const dadosGrafico = resultados.slice(-8).map((r, i) => ({
+    i: i + 1,
+    nota: Number(r.nota_estimada),
+    data: new Date(r.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+  }));
 
   return (
     <div className="min-h-screen bg-background">
@@ -234,11 +207,61 @@ const MateriaPage = () => {
           <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h1 className="text-xl font-bold font-display">{materia.nome}</h1>
+          <div>
+            <h1 className="text-xl font-bold font-display">{materia.nome}</h1>
+            {resultados.length > 0 && (
+              <p className="text-xs text-muted-foreground">{resultados.length} quiz{resultados.length !== 1 ? "zes" : ""} · média {mediaNotas}</p>
+            )}
+          </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-4xl space-y-6">
+
+        {/* Estatísticas da matéria */}
+        {resultados.length > 0 && (
+          <Card className="shadow-card border-border/50 animate-fade-in">
+            <CardHeader className="pb-2">
+              <CardTitle className="font-display flex items-center gap-2 text-base">
+                <BarChart2 className="w-4 h-4 text-primary" />
+                Desempenho em {materia.nome}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <p className="text-xl font-bold font-display text-primary">{mediaNotas}</p>
+                  <p className="text-xs text-muted-foreground">Média</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <p className="text-xl font-bold font-display text-success">{melhorNota}</p>
+                  <p className="text-xs text-muted-foreground">Melhor nota</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <p className="text-xl font-bold font-display">{taxaAcerto}%</p>
+                  <p className="text-xs text-muted-foreground">Taxa de acerto</p>
+                </div>
+              </div>
+
+              {dadosGrafico.length >= 2 && (
+                <ResponsiveContainer width="100%" height={120}>
+                  <LineChart data={dadosGrafico} margin={{ top: 5, right: 10, left: -25, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <XAxis dataKey="data" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis domain={[0, 10]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid var(--border)", background: "var(--card)" }}
+                      formatter={(v: any) => [Number(v).toFixed(1), "Nota"]}
+                    />
+                    <Line type="monotone" dataKey="nota" stroke="hsl(var(--primary))" strokeWidth={2}
+                      dot={{ r: 3, fill: "hsl(var(--primary))" }} activeDot={{ r: 5 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Upload PDF */}
         <Card className="shadow-card border-border/50 animate-fade-in">
           <CardHeader>
@@ -252,29 +275,18 @@ const MateriaPage = () => {
               htmlFor="pdf-upload"
               className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg p-8 cursor-pointer hover:border-primary/50 transition-colors"
             >
-              {uploading ? (
-                <Loader2 className="w-8 h-8 text-primary animate-spin" />
-              ) : (
-                <Upload className="w-8 h-8 text-muted-foreground mb-2" />
-              )}
+              {uploading ? <Loader2 className="w-8 h-8 text-primary animate-spin" /> : <Upload className="w-8 h-8 text-muted-foreground mb-2" />}
               <span className="text-sm text-muted-foreground">
                 {uploading ? "Processando PDF..." : "Clique para enviar um PDF (máx 10MB)"}
               </span>
             </Label>
-            <Input
-              id="pdf-upload"
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={handleUpload}
-              disabled={uploading}
-            />
+            <Input id="pdf-upload" type="file" accept=".pdf" className="hidden" onChange={handleUpload} disabled={uploading} />
           </CardContent>
         </Card>
 
         {/* Documents List */}
         {documentos.length > 0 && (
-          <Card className="shadow-card border-border/50 animate-fade-in" style={{ animationDelay: "0.1s" }}>
+          <Card className="shadow-card border-border/50 animate-fade-in">
             <CardHeader>
               <CardTitle className="font-display flex items-center gap-2">
                 <FileText className="w-5 h-5 text-secondary" />
@@ -298,7 +310,7 @@ const MateriaPage = () => {
         )}
 
         {/* Generate Quiz */}
-        <Card className="shadow-card border-border/50 animate-fade-in" style={{ animationDelay: "0.2s" }}>
+        <Card className="shadow-card border-border/50 animate-fade-in">
           <CardHeader>
             <CardTitle className="font-display flex items-center gap-2">
               <Brain className="w-5 h-5 text-accent" />
@@ -309,57 +321,31 @@ const MateriaPage = () => {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <Label>Nota desejada</Label>
-                <span className="text-sm font-medium text-primary">
-                  {notaDesejada.toFixed(0)} — {dificuldadeLabel}
-                </span>
+                <span className="text-sm font-medium text-primary">{notaDesejada.toFixed(0)} — {dificuldadeLabel}</span>
               </div>
-              <Slider
-                min={1}
-                max={10}
-                step={1}
-                value={[notaDesejada]}
-                onValueChange={([v]) => setNotaDesejada(v)}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Quanto maior a nota, mais difíceis serão as questões
-              </p>
+              <Slider min={1} max={10} step={1} value={[notaDesejada]} onValueChange={([v]) => setNotaDesejada(v)} />
+              <p className="text-xs text-muted-foreground mt-1">Quanto maior a nota, mais difíceis serão as questões</p>
             </div>
-            <Button
-              variant="hero"
-              className="w-full"
-              onClick={gerarQuiz}
-              disabled={gerando || documentos.length === 0}
-            >
+            <Button variant="hero" className="w-full" onClick={gerarQuiz} disabled={gerando || documentos.length === 0}>
               {gerando ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Gerando questões...
-                </>
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Gerando questões...</>
               ) : (
-                <>
-                  <Brain className="w-4 h-4 mr-2" />
-                  Gerar Quiz ({documentos.length} PDF{documentos.length !== 1 ? "s" : ""})
-                </>
+                <><Brain className="w-4 h-4 mr-2" />Gerar Quiz ({documentos.length} PDF{documentos.length !== 1 ? "s" : ""})</>
               )}
             </Button>
           </CardContent>
         </Card>
 
-        {/* Import Exercise List Button */}
-        <Card className="shadow-card border-border/50 animate-fade-in" style={{ animationDelay: "0.3s" }}>
+        {/* Import Exercise List */}
+        <Card className="shadow-card border-border/50 animate-fade-in">
           <CardContent className="pt-6">
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setImportModalOpen(true)}
-            >
+            <Button variant="outline" className="w-full" onClick={() => setImportModalOpen(true)}>
               <ClipboardList className="w-4 h-4 mr-2" />
               📄 Importar Lista de Exercícios
             </Button>
           </CardContent>
         </Card>
 
-        {/* Import Modal */}
         <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
           <DialogContent>
             <DialogHeader>
@@ -369,37 +355,22 @@ const MateriaPage = () => {
               <p className="text-sm text-muted-foreground">
                 Envie um PDF com sua lista de exercícios. A IA irá extrair e estruturar as questões automaticamente.
               </p>
-              <Label
-                htmlFor="lista-upload"
-                className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg p-8 cursor-pointer hover:border-primary/50 transition-colors"
-              >
+              <Label htmlFor="lista-upload"
+                className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg p-8 cursor-pointer hover:border-primary/50 transition-colors">
                 {importando ? (
-                  <>
-                    <Loader2 className="w-8 h-8 text-primary animate-spin mb-2" />
-                    <span className="text-sm text-muted-foreground">Lendo sua lista de exercícios...</span>
-                  </>
+                  <><Loader2 className="w-8 h-8 text-primary animate-spin mb-2" /><span className="text-sm text-muted-foreground">Lendo sua lista...</span></>
                 ) : (
-                  <>
-                    <Upload className="w-8 h-8 text-muted-foreground mb-2" />
-                    <span className="text-sm text-muted-foreground">Clique para enviar um PDF</span>
-                  </>
+                  <><Upload className="w-8 h-8 text-muted-foreground mb-2" /><span className="text-sm text-muted-foreground">Clique para enviar um PDF</span></>
                 )}
               </Label>
-              <Input
-                id="lista-upload"
-                type="file"
-                accept=".pdf"
-                className="hidden"
-                onChange={handleImportLista}
-                disabled={importando}
-              />
+              <Input id="lista-upload" type="file" accept=".pdf" className="hidden" onChange={handleImportLista} disabled={importando} />
             </div>
           </DialogContent>
         </Dialog>
 
         {/* Minhas Listas */}
         {listas.length > 0 && (
-          <Card className="shadow-card border-border/50 animate-fade-in" style={{ animationDelay: "0.4s" }}>
+          <Card className="shadow-card border-border/50 animate-fade-in">
             <CardHeader>
               <CardTitle className="font-display flex items-center gap-2">
                 <ClipboardList className="w-5 h-5 text-primary" />
@@ -409,10 +380,8 @@ const MateriaPage = () => {
             <CardContent className="space-y-2">
               {listas.map((lista) => (
                 <div key={lista.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div
-                    className="flex items-center gap-2 min-w-0 cursor-pointer hover:text-primary transition-colors flex-1"
-                    onClick={() => navigate(`/lista/${lista.id}`)}
-                  >
+                  <div className="flex items-center gap-2 min-w-0 cursor-pointer hover:text-primary transition-colors flex-1"
+                    onClick={() => navigate(`/lista/${lista.id}`)}>
                     <ClipboardList className="w-4 h-4 text-muted-foreground shrink-0" />
                     <div className="min-w-0">
                       <span className="text-sm font-medium truncate block">{lista.titulo}</span>
