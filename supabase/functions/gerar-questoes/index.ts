@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { texto, notaDesejada, materiaId } = await req.json();
+    const { texto, notaDesejada, materiaId, qtdQuestoes } = await req.json();
 
     if (!texto || !materiaId) {
       return new Response(JSON.stringify({ error: "Missing texto or materiaId" }), {
@@ -40,6 +40,7 @@ serve(async (req) => {
     }
 
     const nota = notaDesejada || 7;
+    const quantidade = Math.min(Math.max(Number(qtdQuestoes) || 10, 5), 20);
     const dificuldade = nota >= 8 ? "difícil" : nota >= 5 ? "médio" : "fácil";
 
     const systemPrompt = `Você é um professor especialista que gera questões de prova sobre o CONTEÚDO da disciplina.
@@ -47,7 +48,7 @@ serve(async (req) => {
 Nível de dificuldade: ${dificuldade} (nota desejada: ${nota}/10)
 
 REGRAS OBRIGATÓRIAS:
-- Gere exatamente 10 questões de múltipla escolha
+- Gere exatamente ${quantidade} questões de múltipla escolha
 - Cada questão deve ter exatamente 4 alternativas
 - Apenas uma alternativa deve ser correta
 - As questões devem testar o CONHECIMENTO DO CONTEÚDO — conceitos, teorias, processos, fórmulas, definições, aplicações práticas
@@ -122,15 +123,15 @@ Responda APENAS com um array JSON válido, sem texto antes ou depois, sem blocos
     }
 
     const { data: resultadoData, error: resultadoError } = await supabase
-        .from("resultados")
-        .insert({ acertos: 0, erros: 0, nota_estimada: 0, user_id: userId, materia_id: materiaId })
-        .select("id")
-        .single();
+      .from("resultados")
+      .insert({ acertos: 0, erros: 0, nota_estimada: 0, user_id: userId, materia_id: materiaId })
+      .select("id")
+      .single();
 
     if (resultadoError) throw resultadoError;
     const resultadoId = resultadoData.id;
 
-    const questoesInsert = questoes.slice(0, 10).map((q: any) => ({
+    const questoesInsert = questoes.slice(0, quantidade).map((q: any) => ({
       pergunta: q.pergunta,
       alternativas: q.alternativas,
       resposta_correta: q.resposta,

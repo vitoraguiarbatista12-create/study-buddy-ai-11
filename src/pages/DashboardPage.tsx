@@ -4,12 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   BookOpen, Plus, LogOut, FileText, Target, Brain, TrendingUp,
-  Trash2, MoreVertical, Eye, Flame, Star, Calendar
+  Trash2, MoreVertical, Eye, Flame, Star, Calendar, Sun, Moon, User
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
@@ -24,6 +26,7 @@ import {
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts";
+import { calcularXP, getNivel, getProgressoNivel, type GamStats } from "@/lib/gamification";
 
 interface Materia { id: string; nome: string; created_at: string; }
 interface Resultado { id: string; acertos: number; erros: number; nota_estimada: number; materia_id: string; created_at: string; }
@@ -45,6 +48,7 @@ const calcularStreak = (resultados: Resultado[]): number => {
 
 const DashboardPage = () => {
   const { user, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [materias, setMaterias] = useState<Materia[]>([]);
   const [resultados, setResultados] = useState<Resultado[]>([]);
@@ -95,12 +99,28 @@ const DashboardPage = () => {
     ? (resultados.reduce((s, r) => s + Number(r.nota_estimada), 0) / resultados.length).toFixed(1) : "—";
   const melhorNota = resultados.length > 0
     ? Math.max(...resultados.map(r => Number(r.nota_estimada))).toFixed(1) : "—";
-
   const dadosGrafico = [...resultados].slice(-10).map((r, i) => ({
     i: i + 1,
     nota: Number(r.nota_estimada),
     data: new Date(r.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
   }));
+
+  // XP / Nível
+  const hoje = new Date().toDateString();
+  const gamStats: GamStats = {
+    totalQuizzes: resultados.length,
+    totalAcertos: resultados.reduce((s, r) => s + r.acertos, 0),
+    totalErros: resultados.reduce((s, r) => s + r.erros, 0),
+    melhorNota: resultados.length > 0 ? Math.max(...resultados.map(r => Number(r.nota_estimada))) : 0,
+    streak,
+    totalMaterias: materias.length,
+    notasAcima8: resultados.filter(r => Number(r.nota_estimada) >= 8).length,
+    notasAbaixo5: resultados.filter(r => Number(r.nota_estimada) < 5).length,
+    quizzesHoje: resultados.filter(r => new Date(r.created_at).toDateString() === hoje).length,
+  };
+  const xp = calcularXP(gamStats);
+  const nivel = getNivel(xp);
+  const progressoNivel = getProgressoNivel(xp);
 
   const cls = (nota: number) =>
     nota >= 8 ? { label: "Avançado", color: "text-success" } :
@@ -123,21 +143,36 @@ const DashboardPage = () => {
             </div>
             <span className="text-xl font-bold font-display gradient-text">StudyAI</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             {streak > 0 && (
               <div className="flex items-center gap-1 text-orange-500 font-semibold text-sm">
-                <Flame className="w-4 h-4" />
-                <span>{streak} {streak === 1 ? "dia" : "dias"}</span>
+                <Flame className="w-4 h-4" /><span>{streak}d</span>
               </div>
             )}
-            <span className="text-sm text-muted-foreground hidden sm:inline">
-              Olá, {profile?.nome || user?.email}
-            </span>
+            {/* XP chip */}
+            <button onClick={() => navigate("/perfil")}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors text-xs font-semibold text-primary">
+              <span>{nivel.emoji}</span>
+              <span>{nivel.nome}</span>
+              <span className="text-primary/60">· {xp} XP</span>
+            </button>
+            <Button variant="ghost" size="icon" onClick={toggleTheme}>
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => navigate("/perfil")}>
+              <User className="w-4 h-4" />
+            </Button>
             <Button variant="ghost" size="sm" onClick={async () => { await signOut(); navigate("/login"); }}>
-              <LogOut className="w-4 h-4 mr-1" /> Sair
+              <LogOut className="w-4 h-4" />
             </Button>
           </div>
         </div>
+        {/* XP bar */}
+        {resultados.length > 0 && (
+          <div className="container mx-auto px-4 pb-2">
+            <Progress value={progressoNivel} className="h-1 bg-primary/10" />
+          </div>
+        )}
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-6xl space-y-8">
@@ -166,6 +201,48 @@ const DashboardPage = () => {
           ))}
         </div>
 
+        {/* Atalhos rápidos */}
+        <div className="grid grid-cols-2 gap-3 animate-fade-in">
+          <Card className="shadow-card border-border/50 cursor-pointer hover:shadow-elevated hover:border-accent/40 transition-all group"
+            onClick={() => navigate("/plano")}>
+            <CardContent className="py-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center shrink-0 group-hover:bg-accent/20 transition-colors">
+                <span className="text-xl">🗓️</span>
+              </div>
+              <div>
+                <p className="font-semibold text-sm font-display">Plano de Estudos</p>
+                <p className="text-xs text-muted-foreground">IA analisa suas notas</p>
+              </div>
+            </CardContent>
+          </Card>
+          {materias.length > 0 ? (
+            <Card className="shadow-card border-border/50 cursor-pointer hover:shadow-elevated hover:border-secondary/40 transition-all group"
+              onClick={() => navigate(`/flashcards/${materias[0].id}`)}>
+              <CardContent className="py-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center shrink-0 group-hover:bg-secondary/20 transition-colors">
+                  <span className="text-xl">🃏</span>
+                </div>
+                <div>
+                  <p className="font-semibold text-sm font-display">Flashcards</p>
+                  <p className="text-xs text-muted-foreground">{materias[0].nome}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="shadow-card border-border/50 border-dashed opacity-50">
+              <CardContent className="py-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0">
+                  <span className="text-xl">🃏</span>
+                </div>
+                <div>
+                  <p className="font-semibold text-sm font-display">Flashcards</p>
+                  <p className="text-xs text-muted-foreground">Crie uma matéria</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
         {/* Streak banner */}
         {streak >= 2 && (
           <Card className="border-orange-500/30 bg-orange-500/5 shadow-card animate-fade-in">
@@ -183,13 +260,12 @@ const DashboardPage = () => {
           </Card>
         )}
 
-        {/* Gráfico de evolução */}
+        {/* Gráfico */}
         {dadosGrafico.length >= 2 && (
           <Card className="shadow-card border-border/50 animate-fade-in">
             <CardHeader className="pb-2">
               <CardTitle className="font-display flex items-center gap-2 text-base">
-                <TrendingUp className="w-4 h-4 text-primary" />
-                Evolução das Notas
+                <TrendingUp className="w-4 h-4 text-primary" /> Evolução das Notas
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -198,11 +274,8 @@ const DashboardPage = () => {
                   <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                   <XAxis dataKey="data" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                   <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <Tooltip
-                    contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid var(--border)", background: "var(--card)" }}
-                    formatter={(v: any) => [Number(v).toFixed(1), "Nota"]}
-                    labelFormatter={(l) => `Data: ${l}`}
-                  />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid var(--border)", background: "var(--card)" }}
+                    formatter={(v: any) => [Number(v).toFixed(1), "Nota"]} labelFormatter={(l) => `Data: ${l}`} />
                   <Line type="monotone" dataKey="nota" stroke="hsl(var(--primary))" strokeWidth={2}
                     dot={{ r: 4, fill: "hsl(var(--primary))" }} activeDot={{ r: 6 }} />
                 </LineChart>
@@ -257,8 +330,7 @@ const DashboardPage = () => {
                           onClick={() => navigate(`/materia/${m.id}`)}>
                           {m.nome}
                         </CardTitle>
-                        <Button variant="ghost" size="icon"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity"
                           onClick={(e) => { e.stopPropagation(); deletarMateria(m.id); }}>
                           <Trash2 className="w-4 h-4 text-destructive" />
                         </Button>
@@ -272,9 +344,7 @@ const DashboardPage = () => {
                             <span className="text-xs text-muted-foreground">média · {quizzesM.length} quiz{quizzesM.length !== 1 ? "zes" : ""}</span>
                           </>
                         ) : (
-                          <span className="text-xs text-muted-foreground">
-                            Criada em {new Date(m.created_at).toLocaleDateString("pt-BR")}
-                          </span>
+                          <span className="text-xs text-muted-foreground">Criada em {new Date(m.created_at).toLocaleDateString("pt-BR")}</span>
                         )}
                       </div>
                       <Button variant="outline" size="sm" className="w-full" onClick={() => navigate(`/materia/${m.id}`)}>
@@ -288,7 +358,7 @@ const DashboardPage = () => {
           )}
         </div>
 
-        {/* Resultados recentes */}
+        {/* Resultados Recentes */}
         {resultadosRecentes.length > 0 && (
           <div>
             <h2 className="text-xl font-bold font-display mb-4">Resultados Recentes</h2>
@@ -322,8 +392,7 @@ const DashboardPage = () => {
                             <DropdownMenuItem onClick={() => navigate(`/revisao/${r.id}`)}>
                               <Eye className="w-4 h-4 mr-2" /> Ver respostas
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive focus:text-destructive"
-                              onClick={() => setDeleteId(r.id)}>
+                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteId(r.id)}>
                               <Trash2 className="w-4 h-4 mr-2" /> Apagar
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -349,9 +418,7 @@ const DashboardPage = () => {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={deletarResultado} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                Apagar
-              </AlertDialogAction>
+              <AlertDialogAction onClick={deletarResultado} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Apagar</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
