@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { criarCartao, calcularProximaRevisao, labelIntervalo } from "@/lib/spacedRepetition";
 import {
   Trophy, ArrowLeft, TrendingUp, AlertTriangle, CheckCircle, Loader2,
   RotateCcw, Eye
@@ -29,6 +30,52 @@ const ResultadoPage = () => {
         .single();
       setResultado(data);
       setLoading(false);
+
+      // Agenda/atualiza revisão espaçada ao carregar o resultado
+      if (data && user) {
+        const nota = Number(data.nota_estimada);
+        const materiaNome = (data.materias as any)?.nome || "Matéria";
+
+        const { data: existente } = await supabase
+          .from("revisoes_agendadas")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("materia_id", data.materia_id)
+          .single();
+
+        if (existente) {
+          // Atualiza usando SM-2
+          const cartaoAtualizado = calcularProximaRevisao({
+            materiaId: data.materia_id,
+            materiaNome,
+            intervaloDias: existente.intervalo_dias,
+            facilidade: existente.facilidade,
+            repeticoes: existente.repeticoes,
+            ultimaNota: existente.ultima_nota,
+            proximaRevisao: existente.proxima_revisao,
+          }, nota);
+          await supabase.from("revisoes_agendadas").update({
+            intervalo_dias: cartaoAtualizado.intervaloDias,
+            facilidade: cartaoAtualizado.facilidade,
+            repeticoes: cartaoAtualizado.repeticoes,
+            ultima_nota: nota,
+            proxima_revisao: cartaoAtualizado.proximaRevisao,
+            updated_at: new Date().toISOString(),
+          }).eq("id", existente.id);
+        } else {
+          // Cria novo cartão
+          const novoCartao = criarCartao(data.materia_id, materiaNome, nota);
+          await supabase.from("revisoes_agendadas").insert({
+            user_id: user.id,
+            materia_id: data.materia_id,
+            intervalo_dias: novoCartao.intervaloDias,
+            facilidade: novoCartao.facilidade,
+            repeticoes: novoCartao.repeticoes,
+            ultima_nota: nota,
+            proxima_revisao: novoCartao.proximaRevisao,
+          });
+        }
+      }
 
       if (data && !data.feedback) {
         const interval = setInterval(async () => {

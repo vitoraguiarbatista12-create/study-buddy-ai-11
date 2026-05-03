@@ -52,6 +52,7 @@ const DashboardPage = () => {
   const navigate = useNavigate();
   const [materias, setMaterias] = useState<Materia[]>([]);
   const [resultados, setResultados] = useState<Resultado[]>([]);
+  const [revisoesPendentes, setRevisoesPendentes] = useState(0);
   const [novaMateria, setNovaMateria] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -62,14 +63,16 @@ const DashboardPage = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    const [materiasRes, resultadosRes, profileRes] = await Promise.all([
+    const [materiasRes, resultadosRes, profileRes, revisoesRes] = await Promise.all([
       supabase.from("materias").select("*").order("created_at", { ascending: false }),
       supabase.from("resultados").select("*").order("created_at", { ascending: true }),
       supabase.from("profiles").select("nome").eq("user_id", user!.id).single(),
+      supabase.from("revisoes_agendadas").select("id").eq("user_id", user!.id).lte("proxima_revisao", new Date().toISOString().split("T")[0]),
     ]);
     if (materiasRes.data) setMaterias(materiasRes.data);
     if (resultadosRes.data) setResultados(resultadosRes.data);
     if (profileRes.data) setProfile(profileRes.data);
+    setRevisoesPendentes(revisoesRes.data?.length || 0);
     setLoading(false);
   };
 
@@ -200,6 +203,27 @@ const DashboardPage = () => {
             </Card>
           ))}
         </div>
+
+        {/* Banner revisões pendentes */}
+        {revisoesPendentes > 0 && (
+          <Card className="border-primary/30 bg-primary/5 shadow-card animate-fade-in cursor-pointer hover:shadow-elevated transition-shadow"
+            onClick={() => navigate("/revisao-espacada")}>
+            <CardContent className="py-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+                  <span className="text-xl">🔁</span>
+                </div>
+                <div>
+                  <p className="font-bold font-display text-primary">
+                    {revisoesPendentes} revisão{revisoesPendentes !== 1 ? "ões" : ""} pendente{revisoesPendentes !== 1 ? "s" : ""}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Revise agora para fixar na memória de longo prazo</p>
+                </div>
+              </div>
+              <Button variant="hero" size="sm" className="shrink-0">Revisar</Button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Atalhos rápidos */}
         <div className="grid grid-cols-2 gap-3 animate-fade-in">

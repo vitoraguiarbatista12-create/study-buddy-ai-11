@@ -17,6 +17,7 @@ import ListaExerciciosPage from "./pages/ListaExerciciosPage";
 import ProfilePage from "./pages/ProfilePage";
 import FlashcardsPage from "./pages/FlashcardsPage";
 import PlanPage from "./pages/PlanPage";
+import RevisaoEspacadaPage from "./pages/RevisaoEspacadaPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="/perfil" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
               <Route path="/flashcards/:materiaId" element={<ProtectedRoute><FlashcardsPage /></ProtectedRoute>} />
               <Route path="/plano" element={<ProtectedRoute><PlanPage /></ProtectedRoute>} />
+              <Route path="/revisao-espacada" element={<ProtectedRoute><RevisaoEspacadaPage /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
